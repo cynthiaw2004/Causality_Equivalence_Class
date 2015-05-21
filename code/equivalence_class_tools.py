@@ -1,6 +1,7 @@
 import sys
 import os
-scriptpath = "/na/homes/cfreeman/Documents/virtual_test_environment/gunfolds/tools"
+scriptpath = "/Users/cynthia/Desktop/Causality/virtual_environment_test/gunfolds/tools"
+#scriptpath = "/na/homes/cfreeman/Documents/virtual_test_environment/gunfolds/tools"
 sys.path.append(os.path.abspath(scriptpath))
 import traversal, bfutils, graphkit,unknownrate,comparison
 from Levenshtein import hamming
@@ -8,11 +9,11 @@ import numpy as np
 from numpy.random import randint
 import zickle as zkl
 import matplotlib.pyplot as plt
-from itertools import combinations
+from itertools import combinations,permutations
 
 
 
-#this function is sort of bad and will be made better later after a pattern is found
+#TODO: improve this function
 #input: number of nodes
 #output: try to create an H that will have a nonempty equivalence class
 def generate_H(num_nodes):
@@ -25,7 +26,7 @@ def generate_H(num_nodes):
 	#print H
 	return H
 
-#this function is sort of bad and will be made better later after a pattern is found
+#TODO: improve this function
 #input: numH (number of H wanted)
 def create_H_and_eqcs(numH):
 	H_array = []
@@ -176,28 +177,169 @@ def determine_adjacency_matrix(G):
 def determine_eigenvalues(M):
 	return np.linalg.eig(M)
 
+#input: a graph, start node, end node
+#output: return a list of all paths from start node to end node in the graph
+def find_all_paths(graph, start, end,path = []):
+	path = path + [start]
+	if start == end:
+	    return [path]
+	if not graph.has_key(start):
+	    return []
+	paths = []
+	for node in graph[start]:
+	    if node not in path:
+	        newpaths = find_all_paths(graph, node, end,path)
+	        for newpath in newpaths:
+	        	paths.append(newpath)
+	#print paths
+	return paths
+
+#input: a graph, start node, end node (start and end node are strings)
+#output: return a list of all the shortest paths from start node to end node in the graph
+def find_shortest_paths(graph, start, end, path=[]):
+	all_paths = find_all_paths(graph,start,end,path = [])
+	if all_paths:
+		length_of_shortest_path = len(min(all_paths))
+		shortest_paths = []
+		for path in all_paths:
+			if len(path) == length_of_shortest_path:
+				shortest_paths.append(path)
+		return shortest_paths
+	else:
+		return []
+
+#X is a pivotal node wrt distinct nodes Y and Z
+#if X lies on every SHORTEST path between Y and Z and
+#X is not equal to Y or Z
+#input: graph,x (the node we check for pivotality),y,z (x,y,z are strings)
+#output: T if x is a pivotal node wrt y and x
+#		 F if x is not a pivotal node wrt y and x
+# 		 -1 if x=y or y=z or x=z
+def determine_pivotal_x(graph,x,y,z):
+	if x==y or y==z or x==z:
+		return -1
+	shortest_paths = find_shortest_paths(graph,y,z)
+	if shortest_paths:
+		for path in shortest_paths:
+			if x not in path:
+				return False
+		return True
+	return False
+
+#X is a pivotal node if X is
+#pivotal for every pair of distinct vertices Y and Z
+#input: a graph and a node x to test for pivotality (str)
+#output: T if x is pivotal in general
+#		 F if x is not pivotal in general
+def determine_all_pivotal_x(graph,x):
+	#determine all pairs of distinct vertices
+	number_of_nodes = len(graph)
+	nodes = set([str(i) for i in range(1,number_of_nodes+1)])
+	nodes = nodes - set([x])
+	pairs = []
+	for perm in permutations(nodes,2):
+		#print perm
+		pairs.append(perm)
+	for pair in pairs:
+		if determine_pivotal_x(graph,x,pair[0],pair[1]) == False:
+			return False
+	return True
+
+#input: a graph in dictionary format
+#output: a dictionary where key = node and value = T if node is pivotal
+#and F if node is not pivotal
+def determine_all_pivotal(graph):
+	number_of_nodes = len(graph)
+	nodes = set([i for i in range(1,number_of_nodes+1)])
+	nodes_piv = {key:None for key in range(1,number_of_nodes+1)}
+	for node in nodes:
+		nodes_piv[node] = determine_all_pivotal_x(graph,str(node))
+	return nodes_piv
+
+
+#betweeness centrality
+
+#input: graph, start, end and passed node (str)
+#output: total number of shortest paths from start to end passing passed/
+#		 total number of shortest paths from start to end
+def determine_fraction_bc(graph,start,end,passed):
+	if start == end or start == passed or end == passed:
+		return "error"
+	shortest_paths = find_shortest_paths(graph,start,end)
+	denom = len(shortest_paths)
+	if denom == 0:
+		return 0
+	num = 0
+	for path in shortest_paths:
+		if passed in path:
+			num = num + 1
+	print "node: ",passed
+	print "num: ",num
+	print "denom: ",denom
+	return num/float(denom)
+
+#input: graph, the node (str) that you want the between centrality score of
+#output: the between centrality score of the node
+def determine_betweeness_centrality(graph,passed):
+	number_of_nodes = len(graph)
+	nodes = set([str(i) for i in range(1,number_of_nodes+1)])
+	nodes = nodes - set([passed])
+	pairs = []
+	for perm in permutations(nodes,2):
+		#print perm
+		pairs.append(perm)
+	summed = 0
+	for pair in pairs:
+		summed = summed + determine_fraction_bc(graph,pair[0],pair[1],passed)
+	return summed
+
+#input: graph
+#output: dictionary where key = node and value = bc score
+def determine_all_betweeness_centrality(graph):
+	number_of_nodes = len(graph)
+	nodes = set([i for i in range(1,number_of_nodes+1)])
+	nodes_bc = {key:None for key in range(1,number_of_nodes+1)}
+	for node in nodes:
+		nodes_bc[node] = determine_betweeness_centrality(graph,str(node))
+	return nodes_bc
 
 #############testing area###########################
 
 
-#what doesnt seem like there isnt a pattern: in and out degree, hamming distance between members and between members and H, eigenvalues
-#consider monoids now?
+#what fails: 
+#in degree,
+#out degree, 
+#hamming distance between members 
+#hamming distance between members and H, 
+#eigenvalues
+#pivotal nodes (If X is a pivotal node for Y and Z in a graph in the eqc, does 
+#this hold for all other graphs in the same eqc?)
+#to try: centrality
+
+# Hs = zkl.load("random_H.zkl")
+# eqcs = zkl.load("eqcs_for_H")
+
+# for i in range(len(Hs)):
+# 	H = Hs[i]
+# 	eqc = eqcs[i]
+# 	if eqc != set([-1]):
+# 		print "H: ",determine_all_betweeness_centrality(H)
+# 		print eqc
+# 		for graphstr in eqc:
+# 			graph = comparison.num2CG(graphstr,len(H))
+# 			print determine_all_betweeness_centrality(graph)
+# 		print "\n"
+
+G = {
+'1': {'2': set([(0,1)])},
+'2': {'1': set([(0,1)]),'3': set([(0,1)])},
+'3': {'2': set([(0,1)])}
+}
+
+print determine_all_betweeness_centrality(G)
 
 
-Hs = zkl.load("random_H.zkl")
-eqcs = zkl.load("eqcs_for_H")
 
-for i in range(len(Hs)):
-	H = Hs[i]
-	eqc = eqcs[i]
-	if len(eqc) == 1 and eqc != set([-1]):
-		print "H: ",H
-		print eqc
-		for graphstr in eqc:
-			#print "eqc member: ",graphstr
-			graph = comparison.num2CG(graphstr,len(H))
-			print graph
-		print "\n"
 
 
 
