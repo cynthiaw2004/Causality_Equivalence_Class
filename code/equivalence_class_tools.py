@@ -1,7 +1,7 @@
 import sys
 import os
-scriptpath = "/Users/cynthia/Desktop/Causality/virtual_environment_test/gunfolds/tools"
-#scriptpath = "/na/homes/cfreeman/Documents/virtual_test_environment/gunfolds/tools"
+#scriptpath = "/Users/cynthia/Desktop/Causality/virtual_environment_test/gunfolds/tools"
+scriptpath = "/na/homes/cfreeman/Documents/virtual_test_environment/gunfolds/tools"
 sys.path.append(os.path.abspath(scriptpath))
 import traversal, bfutils, graphkit,unknownrate,comparison
 from Levenshtein import hamming
@@ -9,11 +9,11 @@ import numpy as np
 from numpy.random import randint
 import zickle as zkl
 import matplotlib.pyplot as plt
-from itertools import combinations,permutations
+from itertools import permutations,product,combinations,chain
 
 
 
-#TODO: improve this function
+
 #input: number of nodes
 #output: try to create an H that will have a nonempty equivalence class
 def generate_H(num_nodes):
@@ -26,8 +26,10 @@ def generate_H(num_nodes):
 	#print H
 	return H
 
-#TODO: improve this function
 #input: numH (number of H wanted)
+#output: none but creates
+#a zickle file for array of H and array of eqc
+#eqc_array[i] gives the eqc of random_H[i] 
 def create_H_and_eqcs(numH):
 	H_array = []
 	eqc_array = []
@@ -40,6 +42,70 @@ def create_H_and_eqcs(numH):
 	zkl.save(H_array,"random_H.zkl")
 	zkl.save(eqc_array,"eqcs_for_H")
 
+#input: number of nodes (only 3 works right now)
+#output: none but creates
+#a zickle file for array of H and array of eqc
+#eqc_array[i] gives the eqc of codomain[i] 
+def create_all_H_and_eqcs(n):
+	codomain = determine_codomain(n)
+	eqc_array = []
+	for H in codomain:
+		eqc_for_H = determine_equivalence_class_iterative_precompute(H)
+		eqc_array.append(eqc_for_H)
+	zkl.save(codomain,"H.zkl")
+	zkl.save(eqc_array,"eqcs_for_H.zkl")
+
+#create_all_H_and_eqcs only works for 3 nodes
+#create_H_and_eqcs works for many more nodes
+
+#input: number of vertices 
+#ouput: empty graph dictionary for n vertices
+def generate_Empty_Graph(n):
+	g = {}
+	for i in range(n):
+		g[str(i+1)] = {} #use str to match sergey's call undersamples func
+	return g
+
+#input: number of vertices
+#output: the codomain-list of all possible graphs with n many vertices
+#(both directed and bidirected edges allowed)
+def determine_codomain(n):
+	vertices = [x+1 for x in range(n)]
+	#determine all single directed edges
+	single_directed_edge_list = list(product(vertices,vertices))
+	#determine all bidirected edges
+	bidirected_edge_list = list(combinations(vertices,2))
+	bidirected_edge_list_0 = []
+	for k in bidirected_edge_list:
+		(x,y) = k
+		bidirected_edge_list_0.append((x,y,'bidirected')) #make these distinct from single direct edges
+	#determine all possible graphs that can be formed 
+	single_directed_edge_set = set(single_directed_edge_list)
+	bidirected_edge_set = set(bidirected_edge_list_0)
+	alledges = single_directed_edge_set | bidirected_edge_set
+	allgraphs = chain.from_iterable(combinations(alledges, r) for r in range(len(alledges)+1))
+	#now to convert to dictionary form
+	g = generate_Empty_Graph(n)
+	glist = []
+	for i in allgraphs:
+		if i != ():
+			for e in i:
+				if len(e) == 2:
+					e = (str(e[0]),str(e[1]))
+					if g[e[0]].get(e[1]) == None:
+						g[e[0]][e[1]] = set([(0,1)])
+					else: #entry already exists
+						g[e[0]][e[1]].add((0,1))
+				else: #len(e) ==3
+					e = (str(e[0]),str(e[1]),str(e[2]))
+					if g[e[0]].get(e[1]) == None:
+						g[e[0]][e[1]] = set([(2,0)])
+					else: 
+						g[e[0]][e[1]].add((2,0))
+		glist.append(g)
+		g = generate_Empty_Graph(n)
+	return glist
+
 #input: H
 #output: the equivalence class for H 
 #NOTE: equivalence class consists of all ground truths that lead to the same H regardless of undersampling rate
@@ -47,11 +113,7 @@ def create_H_and_eqcs(numH):
 def determine_equivalence_class_iterative_precompute(H):
 	return unknownrate.liteqclass(H)
 
-#input:G,u
-#output: G^(u+1)
-#note: G = G^1 = bfutils.undersample(G,0)
-def determine_undersample(G,u):
-	return bfutils.undersample(G,u+1)
+
 
 #input: a graph G (dictionary format)
 #output: a dictionary where key = vertex and value = in degree
@@ -256,9 +318,6 @@ def determine_all_pivotal(graph):
 		nodes_piv[node] = determine_all_pivotal_x(graph,str(node))
 	return nodes_piv
 
-
-#betweeness centrality
-
 #input: graph, start, end and passed node (str)
 #output: total number of shortest paths from start to end passing passed/
 #		 total number of shortest paths from start to end
@@ -314,10 +373,25 @@ def determine_all_betweeness_centrality(graph):
 #eigenvalues
 #pivotal nodes (If X is a pivotal node for Y and Z in a graph in the eqc, does 
 #this hold for all other graphs in the same eqc?)
-#to try: centrality
+#centrality
+#groupoids
 
-# Hs = zkl.load("random_H.zkl")
-# eqcs = zkl.load("eqcs_for_H")
+#todo:
+#create ALL H's to make eqcs (so far only 3 nodes...or random H's)
+
+
+
+
+
+
+
+Hs = zkl.load("H_3.zkl")
+eqcs = zkl.load("eqcs_for_H_3.zkl")
+nonempty_eqcs = []
+for eqc in eqcs:
+	if eqc != set([]):
+		nonempty_eqcs.append(eqc)
+print nonempty_eqcs
 
 # for i in range(len(Hs)):
 # 	H = Hs[i]
@@ -330,13 +404,7 @@ def determine_all_betweeness_centrality(graph):
 # 			print determine_all_betweeness_centrality(graph)
 # 		print "\n"
 
-G = {
-'1': {'2': set([(0,1)])},
-'2': {'1': set([(0,1)]),'3': set([(0,1)])},
-'3': {'2': set([(0,1)])}
-}
 
-print determine_all_betweeness_centrality(G)
 
 
 
